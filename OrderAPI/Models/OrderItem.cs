@@ -1,7 +1,4 @@
 ﻿
-
-using System.ComponentModel.DataAnnotations;
-
 namespace OrderAPI.Models
 {
     public class OrderItem

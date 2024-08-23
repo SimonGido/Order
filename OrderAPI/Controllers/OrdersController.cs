@@ -23,6 +23,10 @@ namespace OrderAPI.Controllers
         {
             order.CreatedDate = DateTime.UtcNow;
             order.Status = OrderStatus.New;
+            order.OrderId = Guid.NewGuid().GetHashCode(); // Order ID is determined by server
+            foreach (var item in order.Items)
+                item.OrderId = order.OrderId;
+
             context.Orders.Add(order);
 
             await context.SaveChangesAsync();
