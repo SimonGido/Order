@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Hangfire;
 
 using OrderAPI.Models;
-using OrderAPI.Data;
+using OrderAPI.Requests;
+using OrderAPI.Services;
+using OrderAPI.DTO;
 
 namespace OrderAPI.Controllers
 {
@@ -11,61 +13,108 @@ namespace OrderAPI.Controllers
     [Route("api/[controller]")]
     public class OrdersController : ControllerBase
     {
-        private readonly OrderDbContext context;
+        private readonly IOrderService orderService;
 
-        public OrdersController(OrderDbContext context)
+        public OrdersController(IOrderService orderService)
         {
-            this.context = context;
+            this.orderService = orderService;
         }
 
         [HttpPost("CreateOrder")]
-        public async Task<ActionResult<Order>> CreateOrder([FromBody] Order order)
+        public async Task<ActionResult<OrderDto>> CreateOrder([FromBody] CreateOrderRequest createOrder)
         {
-            order.CreatedDate = DateTime.UtcNow;
-            order.Status = OrderStatus.New;
-            order.OrderId = Guid.NewGuid().GetHashCode(); // Order ID is determined by server
-            foreach (var item in order.Items)
-                item.OrderId = order.OrderId;
+            Order newOrder = new();
+            newOrder.CustomerName = createOrder.CustomerName;
+            newOrder.CreatedDate = DateTime.UtcNow;
+            newOrder.Status = OrderStatus.New;
+            newOrder.Items = new List<OrderItem>();
 
-            context.Orders.Add(order);
+            var orderItemResponses = await ProcessOrderItems(newOrder, createOrder.Items);
+            await orderService.CreateOrderAsync(newOrder);
 
-            await context.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetOrder), new { orderId = order.OrderId }, order);
+            OrderDto orderResponse = new();
+            orderResponse.OrderId = newOrder.OrderId;
+            orderResponse.CustomerName = newOrder.CustomerName;
+            orderResponse.CreatedDateTime = newOrder.CreatedDate;
+            orderResponse.Status = newOrder.Status;
+            orderResponse.Items = orderItemResponses;
+             
+            return CreatedAtAction(
+                actionName:     nameof(GetOrder), 
+                routeValues:    new { orderId = newOrder.OrderId }, 
+                value:          orderResponse
+               );
         }
 
-        [HttpGet("GetOrders")]
-        public async Task<ActionResult<IEnumerable<Order>>> GetOrders()
+        [HttpPost("RemoveProduct")]
+        public async Task<IActionResult> RemoveProduct(int productId)
         {
-            return await context.Orders.Include(o => o.Items).ToListAsync();
-        }
-
-        [HttpGet("GetOrder")]
-        public async Task<ActionResult<Order>> GetOrder(int orderId)
-        {
-            var order = await context.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.OrderId == orderId);
-            if (order == null)
-                return NotFound();
-
-            return order;
+            await orderService.DestroyProductAsync(productId);
+            return Accepted();
         }
 
         [HttpPost("Pay")]
-        public IActionResult PayOrder(int id, [FromBody] bool isPaid)
+        public IActionResult PayOrder(int orderId, [FromBody] bool isPaid)
         {
-            BackgroundJob.Enqueue(() => UpdateOrderStatus(id, isPaid));
+            BackgroundJob.Enqueue(() => UpdateOrderStatus(orderId, isPaid));
             return Accepted();
         }
 
         [NonAction]
-        public async Task UpdateOrderStatus(int id, bool isPaid)
+        public async Task UpdateOrderStatus(int orderId, bool isPaid)
         {
-            var order = await context.Orders.FindAsync(id);
-            if (order == null) return;
-
-            order.Status = isPaid ? OrderStatus.Paid : OrderStatus.Cancelled;
-            await context.SaveChangesAsync();
+            await orderService.UpdateOrderAsync(orderId, (order) =>
+            {
+                order.Status = isPaid ? OrderStatus.Paid : OrderStatus.Cancelled;
+            });
         }
 
-      
+        [HttpGet("GetOrder")]
+        public async Task<ActionResult<OrderDto>> GetOrder(int orderId)
+        {
+            var order = await orderService.GetOrderAsync(orderId);
+            if (order != null)
+            {               
+                return Ok(order);
+            }
+            else
+            {
+                return Problem();
+            }
+        }
+
+       
+
+        [HttpGet("GetOrders")]
+        public async Task<ActionResult<IEnumerable<OrderDto>>> GetOrders()
+        {
+            var orders = await orderService.GetAllOrdersAsync();
+            return Ok(orders);
+        }
+
+        
+        private async Task<List<OrderItemDto>> ProcessOrderItems(Order newOrder, IEnumerable<OrderItemRequest> itemRequests)
+        {
+            List<OrderItemDto> orderItemResponses = new();
+            foreach (var orderItem in  itemRequests)
+            {
+                OrderItem newOrderItem = new();
+                Product? product = await orderService.GetProductAsync(orderItem.ProductId);
+                if (product != null)
+                {
+                    newOrderItem.Quantity = orderItem.Quantity;
+                    newOrderItem.Order = newOrder;
+                    newOrderItem.Product = product;
+                    newOrder.Items.Add(newOrderItem);
+
+                    OrderItemDto orderItemResponse = new();
+                    orderItemResponse.ProductName = product.ProductName;
+                    orderItemResponse.Quantity = orderItem.Quantity;
+                    orderItemResponse.PricePerUnit = product.PricePerUnit;
+                    orderItemResponses.Add(orderItemResponse);
+                }
+            }
+            return orderItemResponses;
+        }
     }
 }

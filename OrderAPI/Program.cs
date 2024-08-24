@@ -2,15 +2,15 @@ using Hangfire;
 using Hangfire.MemoryStorage;
 using Microsoft.EntityFrameworkCore;
 
-using OrderAPI.Data;
+using OrderAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddControllers();
-builder.Services.AddDbContext<OrderDbContext>(options =>
-    options.UseSqlite("Data Source=orders.db"));
+builder.Services.AddSingleton<IOrderService, OrderServiceDb>();
+builder.Services.AddDbContext<OrderServiceDb>();
 
 
 builder.Services.AddHangfire(config => config.UseMemoryStorage());
@@ -22,13 +22,14 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// For testing purposes make sure database is always recreated
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
+    var dbContext = scope.ServiceProvider.GetRequiredService<OrderServiceDb>();
     dbContext.Database.EnsureDeleted();
     dbContext.Database.EnsureCreated();
+    OrderAPI.TestSetupShop.CreateTestProducts(dbContext);
 }
-
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

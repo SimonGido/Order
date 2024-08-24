@@ -1,4 +1,6 @@
-﻿
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using OrderAPI.Requests;
 
 namespace OrderAPI.Models
 {
@@ -10,13 +12,14 @@ namespace OrderAPI.Models
     }
     public class Order
     {
+        [Key]
         public int OrderId { get; set; }
-        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerName { get; set; }
 
         public DateTime CreatedDate { get; set; }
 
         public OrderStatus Status { get; set; }
 
-        public List<OrderItem> Items { get; set; } = new();
+        public ICollection<OrderItem> Items { get;  set; }
     }
 }
