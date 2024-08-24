@@ -54,10 +54,15 @@ namespace OrderAPI.Controllers
         }
 
         [HttpPost("Pay")]
-        public IActionResult PayOrder(int orderId, [FromBody] bool isPaid)
+        public async Task<IActionResult> PayOrder(int orderId, [FromBody] bool isPaid)
         {
-            BackgroundJob.Enqueue(() => UpdateOrderStatus(orderId, isPaid));
-            return Accepted();
+            bool orderExists = await orderService.OrderExists(orderId);
+            if (orderExists)
+            {
+                BackgroundJob.Enqueue(() => UpdateOrderStatus(orderId, isPaid));
+                return Accepted();
+            }
+            return Problem();
         }
 
         [NonAction]
@@ -83,8 +88,7 @@ namespace OrderAPI.Controllers
             }
         }
 
-       
-
+      
         [HttpGet("GetOrders")]
         public async Task<ActionResult<IEnumerable<OrderDto>>> GetOrders()
         {

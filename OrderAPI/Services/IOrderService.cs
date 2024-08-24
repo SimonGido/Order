@@ -12,8 +12,10 @@ namespace OrderAPI.Services
         public Task CreateOrderAsync(Order order);
 
         public Task UpdateOrderAsync(int orderId, Action<Order> updateFunc);
+        public Task<bool> OrderExists(int orderId);
 
         public Task<ICollection<OrderDto>> GetAllOrdersAsync();
+
 
         public Task<OrderDto?> GetOrderAsync(int orderId);
 

@@ -72,6 +72,10 @@ namespace OrderAPI.Services
                 await SaveChangesAsync();
             }   
         }
+        public async Task<bool> OrderExists(int orderId)
+        {
+            return await orders.FindAsync(orderId) != null;
+        }
         public async Task<ICollection<OrderDto>> GetAllOrdersAsync()
         {
             return await orders.Select(o => new OrderDto
